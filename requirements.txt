@@ -3,3 +3,10 @@ python-dotenv
 pydantic
 openai
 uvicorn
+pymilvus
+pdfplumber
+fitz
+PyMuPDF
+
+
+
