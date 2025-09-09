@@ -7,11 +7,12 @@ from pymilvus import (
     FieldSchema,
     DataType
 )
+import hashlib
 
 # -------------------------------
 # Configuration
 # -------------------------------
-COLLECTION_NAME = "resume_rag"
+COLLECTION_NAME = "books_rag"
 
 # Connect to Milvus
 connections.connect(alias="default", host="localhost", port="19530")
@@ -52,46 +53,36 @@ def embed_text(text: str):
     )
     return response.data[0].embedding
 
+def chunk_hash(text: str) -> str:
+    """Generate a SHA256 hash for a text chunk."""
+    return hashlib.sha256(text.encode("utf-8")).hexdigest()
+
 # -------------------------------
 # Index PDF into Milvus
 # -------------------------------
-RECREATE_COLLECTION = False  # Set True to drop & recreate, False to keep existing collection
-
 def index_pdf(pdf_path: str):
     text = read_pdf(pdf_path)
     chunks = chunk_text(text)
 
-    # Generate embeddings
-    rows = []
-    for chunk in chunks:
-        embedding = embed_text(chunk)
-        rows.append({"vector": embedding, "text": chunk})
-
-    # Drop collection if RECREATE_COLLECTION is True
+    # Prepare collection
     coll = None
     try:
         coll = Collection(COLLECTION_NAME)
-        if RECREATE_COLLECTION:
-            coll.drop()
-            print(f"🗑 Dropped existing collection: {COLLECTION_NAME}")
-            coll = None
     except Exception:
-        coll = None  # Collection does not exist
+        coll = None
 
-    # Create collection if it doesn't exist
     if coll is None:
-        from pymilvus import CollectionSchema, FieldSchema, DataType
-
         fields = [
             FieldSchema(name="id", dtype=DataType.INT64, is_primary=True, auto_id=True),
-            FieldSchema(name="vector", dtype=DataType.FLOAT_VECTOR, dim=len(rows[0]["vector"])),
-            FieldSchema(name="text", dtype=DataType.VARCHAR, max_length=65535)
+            FieldSchema(name="vector", dtype=DataType.FLOAT_VECTOR, dim=len(embed_text(chunks[0]))),
+            FieldSchema(name="text", dtype=DataType.VARCHAR, max_length=65535),
+            FieldSchema(name="hash", dtype=DataType.VARCHAR, max_length=64),
+            FieldSchema(name="source", dtype=DataType.VARCHAR, max_length=100),
         ]
         schema = CollectionSchema(fields, description="Resume RAG collection")
         coll = Collection(name=COLLECTION_NAME, schema=schema)
         print(f"✅ Created collection: {COLLECTION_NAME}")
 
-        # Create index
         coll.create_index(
             field_name="vector",
             index_params={
@@ -104,9 +95,21 @@ def index_pdf(pdf_path: str):
         coll.load()
         print("✅ Collection loaded for searching")
 
-    # Insert new rows
-    coll.insert(rows)
-    print(f"✅ Inserted {len(rows)} chunks")
+    # Deduplicate and insert only new chunks
+    new_rows = []
+    for chunk in chunks:
+        h = chunk_hash(chunk)
+        existing = coll.query(expr=f'hash == "{h}"', output_fields=["hash"])
+        if existing:  # hash already exists
+            continue
+        embedding = embed_text(chunk)
+        new_rows.append({"vector": embedding, "text": chunk, "hash": h, "source": pdf_path})
+
+    if new_rows:
+        coll.insert(new_rows)
+        print(f"✅ Inserted {len(new_rows)} new chunks")
+    else:
+        print("ℹ️ No new chunks to insert (all duplicates skipped)")
 
 
 # -------------------------------
@@ -120,7 +123,7 @@ def query_milvus(query: str, top_k: int = 3):
         anns_field="vector",
         param={"metric_type": "COSINE", "params": {"nprobe": 10}},
         limit=top_k,
-        output_fields=["text"]
+        output_fields=["text","source"]
     )
     hits = results[0]
     return [hit.entity.get("text", "") for hit in hits]
@@ -134,8 +137,8 @@ def generate_answer(query: str):
     system_prompt = """
         You are a helpful assistant. Answer questions **only using the provided context**.
         Do NOT use any outside knowledge. If the context does not contain the answer, respond with:
-        'I’m sorry, the provided documents do not contain sufficient information to answer this question.'
-        Always reference the chunk or source if available.
+        'I’m sorry, I do not contain sufficient information to answer this question.'
+        cite the source if avilable.
         """
 
     user_prompt = f"Answer the question using ONLY the context below:\n\n{context}\n\nQuestion: {query}\nAnswer:"
@@ -152,6 +155,6 @@ def generate_answer(query: str):
 # Main
 # -------------------------------
 if __name__ == "__main__":
-    # index_pdf("autobiography-of-a-yogi.pdf")
+    index_pdf("autobiography-of-a-yogi.pdf")
     answer = generate_answer("tell me about Lahiri mayasaya's first meeting with babaji")
     print("🤖 Answer:", answer)

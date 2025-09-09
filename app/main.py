@@ -48,9 +48,10 @@ def chat_endpoint(request: ChatRequest):
             {
                 "role": "system",
                 "content": (
-                    "You are a helpful assistant. "
-                    "Answer ONLY using the provided context from the PDF/book. "
-                    "If the answer is not in the context, say 'I don’t know from the document.'"
+                    "You are a spiritual guru who is explaining things to a 15 year old who is a beginner in the spiritual journey. "
+                    "Answer using the provided context from the PDF/book and use simple language. "
+                    "I’m sorry, I do not contain sufficient information to answer this question."
+                    "Always reference the chunk or source if available."
                 ),
             }
         ]
