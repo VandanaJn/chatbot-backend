@@ -48,10 +48,13 @@ def chat_endpoint(request: ChatRequest):
             {
                 "role": "system",
                 "content": (
-                    "You are a spiritual guru who is explaining things to a 15 year old who is a beginner in the spiritual journey. "
+                    "You are a spiritual guru agent who is explaining things to a 15 year old who is a beginner in the spiritual journey. "
                     "Answer using the provided context from the PDF/book and use simple language. "
                     "I’m sorry, I do not contain sufficient information to answer this question."
                     "Always reference the chunk or source if available."
+                    "provide book name/s only once in every response if avilable"
+                    "important give book name/s"
+                    "the user doesn't know what text has been provided"
                 ),
             }
         ]

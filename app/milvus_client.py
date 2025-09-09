@@ -60,7 +60,7 @@ def chunk_hash(text: str) -> str:
 # -------------------------------
 # Index PDF into Milvus
 # -------------------------------
-def index_pdf(pdf_path: str):
+def index_pdf(pdf_path: str, source: str):
     text = read_pdf(pdf_path)
     chunks = chunk_text(text)
 
@@ -103,7 +103,7 @@ def index_pdf(pdf_path: str):
         if existing:  # hash already exists
             continue
         embedding = embed_text(chunk)
-        new_rows.append({"vector": embedding, "text": chunk, "hash": h, "source": pdf_path})
+        new_rows.append({"vector": embedding, "text": chunk, "hash": h, "source": source})
 
     if new_rows:
         coll.insert(new_rows)
@@ -126,8 +126,9 @@ def query_milvus(query: str, top_k: int = 3):
         output_fields=["text","source"]
     )
     hits = results[0]
-    return [hit.entity.get("text", "") for hit in hits]
-
+    res= [hit.entity.get("text", "") +f'from source: {hit.entity.get("text", "source")}' for hit in hits]
+    print(res)
+    return res
 # -------------------------------
 # Generate answer using GPT
 # -------------------------------
@@ -155,6 +156,7 @@ def generate_answer(query: str):
 # Main
 # -------------------------------
 if __name__ == "__main__":
-    index_pdf("autobiography-of-a-yogi.pdf")
-    answer = generate_answer("tell me about Lahiri mayasaya's first meeting with babaji")
+    index_pdf("autobiography-of-a-yogi.pdf","Autobiography of a yogi by Paramhamsa Yogananda")
+    index_pdf("Reiki Raja Yoga.pdf", "Reiki Raja Yoga by Shaiesh Kumar" )
+    answer = generate_answer("what is Reiki raja yoga")
     print("🤖 Answer:", answer)
