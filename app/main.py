@@ -42,44 +42,62 @@ def chat_endpoint(request: ChatRequest):
     context_chunks = query_milvus(query, top_k=3)
     context = "\n".join(context_chunks)
 
+    # If no context found, return apology immediately
+    if not context_chunks:
+        return {
+            "reply": "I’m sorry, I do not contain sufficient information to answer this question.",
+            "conversation": conversations.get(user_id, [])
+        }
+
     # If this is a new user, initialize their conversation
     if user_id not in conversations:
         conversations[user_id] = [
             {
                 "role": "system",
                 "content": (
-                    "You are a spiritual guru agent who is explaining things to a 15 year old who is a beginner in the spiritual journey. "
-                    "Answer using the provided context from the PDF/book and use simple language. "
-                    "I’m sorry, I do not contain sufficient information to answer this question."
-                    "Always reference the chunk or source if available."
-                    "provide book name/s only once in every response if avilable"
-                    "important give book name/s"
-                    "the user doesn't know what text has been provided"
-                ),
+                    "You are a spiritual guru guiding a beginner on their spiritual journey.\n"
+                    "⚠️ RULES:\n"
+                    "1. Answer ONLY using the provided context.\n"
+                    "2. Do NOT use outside knowledge or add anything extra.\n"
+                    "3. If the context does not contain the answer, respond exactly with:\n"
+                    "   'I’m sorry, I do not contain sufficient information to answer this question.'\n"
+                    "4. Always reference the book name if available.\n"
+                    "5. Mention the book name only once per response.\n"
+                    "6. Never say 'document' or 'PDF'.\n"
+                )
             }
         ]
 
-    # Append the new user query
-    conversations[user_id].append({"role": "user", "content": query})
+    # Append query WITH retrieved context
+    conversations[user_id].append({
+        "role": "user",
+        "content": (
+            f"CONTEXT (from the book):\n{context}\n\n"
+            f"QUESTION: {query}\n\n"
+            "⚠️ IMPORTANT: Use ONLY the context above. "
+            "Do not add anything beyond it."
+        )
+    })
 
-    # Add retrieved context as a hidden system guidance message
-    conversations[user_id].append({"role": "system", "content": f"Context from PDF:\n{context}"})
-
-    # Generate response using OpenAI with conversation + PDF context
+    # Generate response from OpenAI
     response = client.chat.completions.create(
         model="gpt-4o-mini",
         messages=conversations[user_id],
+        temperature=0,   # 🔒 deterministic
+        top_p=1,
+        max_tokens=500   # optional safety limit
     )
 
-    reply = response.choices[0].message.content
+    reply = response.choices[0].message.content.strip()
 
-    # Save assistant response into conversation history
+    # Save assistant response into conversation
     conversations[user_id].append({"role": "assistant", "content": reply})
 
     return {
         "reply": reply,
         "conversation": conversations[user_id],
     }
+
 
 @app.get("/health")
 def health():
