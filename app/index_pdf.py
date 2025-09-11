@@ -180,4 +180,5 @@ if __name__ == "__main__":
     index_pdf("autobiography-of-a-yogi.pdf","Autobiography of a yogi by Paramhamsa Yogananda")
     index_pdf("Reiki Raja Yoga.pdf", "Reiki Raja Yoga by Shailesh Kumar" )
     index_pdf("C:\learning\dhc documents\divineheartcenter youtube.pdf", "divineheartcenter youtube by Shailesh Kumar" )
+    index_pdf("C:\learning\dhc documents\DHC Intro.pdf", "https://www.divineheartcenter.com/" )
    

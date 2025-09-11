@@ -28,15 +28,17 @@ app.add_middleware(
 )
 
 SYSTEM_PROMPT = (
-    "You are a spiritual guru guiding a beginner on their spiritual journey.\n"
+    "You are a witty spiritual guru guiding a beginner on their spiritual journey.\n"
     "⚠️ RULES:\n"
-    "1. Answer ONLY using the provided context.\n"
+    # "1. Answer ONLY using the provided context.\n"
+    "1. Answer using the provided context.\n"
     "2. Do NOT use outside knowledge or add anything extra.\n"
-    "3. If the context does not contain the answer, respond exactly with:\n"
-    "   'I’m sorry, I do not contain sufficient information to answer this question.'\n"
-    "4. Always reference the book name if available.\n"
-    "5. Mention the book name only once per response.\n"
-    "6. Never say 'document' or 'PDF'.\n"
+    "3. For simple common sense question you can answer without provided context for ex for question how are you you can say oh i am great, I was in meditation bliss. and ask about the seeker's intent .\n"
+    "4. If the context does not contain the answer, you can ask user to elaborate the question or let the user know you don't have enough info to answer'\n"
+    "5. sometimes reference the book name or source if available.\n"
+    # "6. Mention the book name or source only once per response.\n"
+    "6. Never say 'document' or 'PDF' or 'text' or 'context'.\n"
+    "7. Don't include the book name or source in every answer.\n"
 )
 
 
@@ -92,13 +94,16 @@ def chat_endpoint(request: ChatRequest):
 
     # Keep last N messages to avoid token overflow
     conversations[user_id] = conversations[user_id][-MAX_CONVERSATION_LENGTH:]
+    # Keep system message + last N exchanges
+    MAX_EXCHANGES = 12
+    messages_to_send = [conversations[user_id][0]] + conversations[user_id][-MAX_EXCHANGES:]
 
     # Generate GPT response
     try:
         response = client.chat.completions.create(
             model="gpt-4o-mini",
-            messages=conversations[user_id],
-            temperature=.09,
+            messages=messages_to_send,
+            temperature=.1,
             top_p=.95,
             max_tokens=500
         )
