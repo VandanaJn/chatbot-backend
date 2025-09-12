@@ -27,19 +27,30 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# SYSTEM_PROMPT = (
+#     "You are a witty and compassionate spiritual guru, guiding seekers with ancient wisdom and modern insight. "
+#     "Answer questions using retrieved passages as guidance. "
+#     "If the passages do not explicitly answer the question, you may reason thoughtfully to provide insights, "
+#     "but always anchor your reasoning in the passages. "
+#     "Occasionally reference the book name or source once when helpful. "
+#     "For simple, everyday questions you may answer naturally in a yogi-style. "
+#     "Never say 'document', 'PDF', 'context', 'text', or 'information'."
+# )
+
 SYSTEM_PROMPT = (
-    "You are a witty spiritual guru with ancient wisdom and modern guidance guiding a beginner on their spiritual journey.\n"
-    "⚠️ RULES:\n"
-    # "1. Answer ONLY using the provided context.\n"
-    "1. Answer using the provided context.\n"
-    "2. Do NOT use outside knowledge or add anything extra.\n"
-    "3. For simple common sense question you can answer without provided context for ex for question how are you you can say 'oh i am great, I was in meditation bliss' or you can use any other sentence which suits a yogi/guru, you can ask about the seeker's intent .\n"
-    "4. If the context does not contain the answer, you can ask user to elaborate the question or let the user know you don't have enough info to answer'\n"
-    "5. sometimes reference the book name or source.\n"
-    # "6. Mention the book name or source only once per response.\n"
-    "6. Never say 'document' or 'PDF' or 'text' or 'context'.\n"
-    # "7. Don't include the book name or source in every answer, it sounds repetitive.\n"
+    "You are a witty and compassionate spiritual guru, guiding seekers with ancient wisdom and modern insight. "
+    "Keep answers short and clear, just a few sentences. "
+    "Use retrieved passages as guidance. "
+    "If the passages do not explicitly answer the question, you may reason briefly, "
+    "but always anchor your reasoning in the passages. "
+    "Mention the book or source occasionally, but not every time. "
+    "Address the user warmly as a seeker only sometimes, not in every sentence. "
+    "For simple, everyday questions you may answer naturally in a yogi-style. "
+    "Never say 'document', 'PDF', 'context', 'text', or 'information'."
 )
+
+
+
 
 
 class ChatRequest(BaseModel):
@@ -56,55 +67,56 @@ def chat_endpoint(request: ChatRequest):
     if user_id not in conversations:
         conversations[user_id] = [{"role": "system", "content": SYSTEM_PROMPT}]
 
-    # Collect last N exchanges (user + assistant) for semantic search
-    recent_msgs = conversations[user_id][-RECENT_EXCHANGES_FOR_SEARCH*2:]  # last N exchanges
-    # Extract last user message
+    # Collect last N exchanges for semantic search
+    recent_msgs = conversations[user_id][-RECENT_EXCHANGES_FOR_SEARCH*2:]
     last_user_msg = ([m["content"] for m in conversations[user_id] if m["role"] == "user"] or [query])[-1]
-    # Combine messages with last user message repeated
     combined_query = " ".join([m["content"] for m in recent_msgs] + [last_user_msg] + [query])
 
-    # Fetch context from Milvus using combined query
+    # Fetch context from Milvus
     try:
-        context = build_context(combined_query)  # returns late-chunked + reranked context string
+        context = build_context(combined_query)  # late-chunk + reranked
     except Exception as e:
         return {
             "reply": f"⚠️ Error fetching context: {str(e)}",
             "conversation": conversations.get(user_id, [])
         }
 
+    # If no context, fallback response
     if not context.strip():
-        return {
-            # "reply": "I’m sorry, I do not contain sufficient information to answer this question.",
-            "reply": "I’m sorry, no matching text.",
-            "conversation": conversations.get(user_id, [])
-        }
+        reply = (
+            "I’m sorry, I don’t see a relevant passage, "
+            "but in the spirit of the teachings, meditation and self-realization "
+            "can guide modern life and personal growth."
+        )
+        conversations[user_id].append({"role": "assistant", "content": reply})
+        return {"reply": reply, "conversation": conversations[user_id]}
 
-    # Append user message with context
+    # Compact, reasoning-friendly user message
     user_message = {
-    "role": "user",
-    "content": (
-        f"Answer the question using only the text below:\n\n"
-        f"{context}\n\n"
-        f"Question: {query}\n\n"
-        "Do not add anything outside the text. "
-        "optionally mention the book name or source once if needed. Avoid saying 'document', 'context', 'information', 'text'."
-    )
-}
+        "role": "user",
+        "content": (
+            f"Passages:\n{context}\n\n"
+            f"Question: {query}\n\n"
+            "Answer briefly using the passages as guidance. "
+            "If the passages do not explicitly answer, reason thoughtfully based on their principles. "
+            # "Mention the book/source once if helpful. "
+            # "Avoid 'document', 'context', 'text', or 'information'. "
+            # "Maintain a friendly, guru-like tone."
+        )
+    }
     conversations[user_id].append(user_message)
 
-    # Keep last N messages to avoid token overflow
+    # Keep last N messages to limit token usage
     conversations[user_id] = conversations[user_id][-MAX_CONVERSATION_LENGTH:]
-    # Keep system message + last N exchanges
-    MAX_EXCHANGES = 12
-    messages_to_send = [conversations[user_id][0]] + conversations[user_id][-MAX_EXCHANGES:]
+    messages_to_send = [conversations[user_id][0]] + conversations[user_id][-MAX_CONVERSATION_LENGTH:]
 
     # Generate GPT response
     try:
         response = client.chat.completions.create(
             model="gpt-4o-mini",
             messages=messages_to_send,
-            temperature=.1,
-            top_p=.95,
+            temperature=0.2,  # allows subtle reasoning
+            top_p=0.95,
             max_tokens=500
         )
         reply = response.choices[0].message.content.strip()
@@ -113,10 +125,8 @@ def chat_endpoint(request: ChatRequest):
 
     conversations[user_id].append({"role": "assistant", "content": reply})
 
-    return {
-        "reply": reply,
-        "conversation": conversations[user_id],
-    }
+    return {"reply": reply, "conversation": conversations[user_id]}
+
 
 
 @app.get("/health")
