@@ -67,14 +67,38 @@ def chat_endpoint(request: ChatRequest):
     if user_id not in conversations:
         conversations[user_id] = [{"role": "system", "content": SYSTEM_PROMPT}]
 
-    # Collect last N exchanges for semantic search
-    recent_msgs = conversations[user_id][-RECENT_EXCHANGES_FOR_SEARCH*2:]
-    last_user_msg = ([m["content"] for m in conversations[user_id] if m["role"] == "user"] or [query])[-1]
-    combined_query = " ".join([m["content"] for m in recent_msgs] + [last_user_msg] + [query])
+    # Collect recent exchanges for semantic search
+    recent_msgs = [
+    m for m in conversations[user_id][-RECENT_EXCHANGES_FOR_SEARCH*2:]
+    if m["role"] in ("user", "assistant")
+    ]
+
+    # --- NEW: Rewrite user query with context ---
+    def build_search_query(history, query):
+        history_text = " ".join([m["content"] for m in history])
+        prompt = (
+            f"Conversation so far:\n{history_text}\n\n"
+            f"User's new question: {query}\n\n"
+            "Rephrase this into a short, standalone query for retrieving relevant passages "
+            "from scriptures and spiritual texts."
+        )
+        resp = client.chat.completions.create(
+            model="gpt-4o-mini",
+            messages=[
+                {"role": "system", "content": "You rewrite user queries for retrieval."},
+                {"role": "user", "content": prompt},
+            ],
+            temperature=0,
+            max_tokens=50
+        )
+        return resp.choices[0].message.content.strip()
+
+    search_query = build_search_query(recent_msgs, query)
+    print(search_query)
 
     # Fetch context from Milvus
     try:
-        context = build_context(combined_query)  # late-chunk + reranked
+        context = build_context(search_query)  # late-chunk + reranked
     except Exception as e:
         return {
             "reply": f"⚠️ Error fetching context: {str(e)}",
@@ -98,10 +122,7 @@ def chat_endpoint(request: ChatRequest):
             f"Passages:\n{context}\n\n"
             f"Question: {query}\n\n"
             "Answer briefly using the passages as guidance. "
-            "If the passages do not explicitly answer, reason thoughtfully based on their principles. "
-            # "Mention the book/source once if helpful. "
-            # "Avoid 'document', 'context', 'text', or 'information'. "
-            # "Maintain a friendly, guru-like tone."
+            "If the passages do not explicitly answer, reason thoughtfully based on their principles."
         )
     }
     conversations[user_id].append(user_message)
@@ -115,7 +136,7 @@ def chat_endpoint(request: ChatRequest):
         response = client.chat.completions.create(
             model="gpt-4o-mini",
             messages=messages_to_send,
-            temperature=0.2,  # allows subtle reasoning
+            temperature=0.2,
             top_p=0.95,
             max_tokens=500
         )
@@ -126,6 +147,7 @@ def chat_endpoint(request: ChatRequest):
     conversations[user_id].append({"role": "assistant", "content": reply})
 
     return {"reply": reply, "conversation": conversations[user_id]}
+
 
 
 
