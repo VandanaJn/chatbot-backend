@@ -69,35 +69,37 @@ docker ps
 
 ```bash
 uvicorn main:app --reload
+```
 
-## 🧘 Document Management
+---
 
-Use these scripts to manage spiritual PDFs in the vector store.
+## 📚 Document Management
+
+Manage spiritual PDFs in the vector store using these utilities.
 
 ### 🧹 Clean Existing Data
 
 ```bash
-python app\milvus_cleanup.py
+python milvus_cleanup.py
 ```
 
-Clears all indexed documents from Milvus. Run this before reindexing.
+Clears all indexed documents from Milvus. Use this before reindexing.
 
-### 📚 Index a New PDF
+### 📥 Index a New PDF
 
 ```python
-# app\index_pdf.py
+# index_pdf.py
 
 if __name__ == "__main__":
     index_pdf(
-        "autobiography-of-a-yogi.pdf",
-        "Autobiography of a Yogi by Paramhansa Yogananda"
+        "Autobiography_of_a_Yogi.pdf",
+        "Autobiography of a Yogi by Paramahansa Yogananda"
     )
 ```
 
 Loads the PDF, chunks it, embeds it, and stores it in Milvus with metadata.
 
-> Ensure Milvus is running at `localhost:19530` before using either script.
-
+> ✅ Ensure Milvus is running at `localhost:19530` before using either script.
 ## 🔁 Endpoints
 
 ### `POST /chat`
