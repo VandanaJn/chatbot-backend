@@ -80,7 +80,7 @@ Manage spiritual PDFs in the vector store using these utilities.
 ### 🧹 Clean Existing Data
 
 ```bash
-python milvus_cleanup.py
+python app\milvus_cleanup.py
 ```
 
 Clears all indexed documents from Milvus. Use this before reindexing.
@@ -88,7 +88,7 @@ Clears all indexed documents from Milvus. Use this before reindexing.
 ### 📥 Index a New PDF
 
 ```python
-# index_pdf.py
+# app\index_pdf.py
 
 if __name__ == "__main__":
     index_pdf(
